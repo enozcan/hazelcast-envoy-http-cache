@@ -51,19 +51,20 @@ public:
     HazelcastBodyPtr body = hz_cache.lookupBody
         (std::to_string(hash_key) + std::to_string(body_index));
     if (body) {
+        // Beginning of the buffer is drained
+        // if necessary (i.e. range does not starts from)
+        // the beginning of the chunk).
+        body->buffer_ptr->drain(range.begin() % body_partition_size);
         if (range.end() < (body_index + 1) * body_partition_size){
           // No other chunk is needed since one chunk satisfies
-          // the range. Beginning of the buffer is drained
-          // if necessary (i.e. range does not starts from)
-          // the beginning of the chunk).
-          body->buffer_ptr->drain(range.begin() % body_partition_size);
+          // the range. Move only needed bytes.
           buffer_ptr->move(*body->buffer_ptr,
               range.end() % body_partition_size);
         } else {
-          // Another body chunk is needed.
-    	  body->buffer_ptr->drain(range.begin() % body_partition_size);
+          // Another body chunk is needed. Hence move all
+          // the bytes in the buffer.
     	  buffer_ptr->move(*body->buffer_ptr);
-        }  
+        }
         cb(std::move(buffer_ptr));
     } else {
         // Body is expected to reside in the cache but lookup
@@ -110,35 +111,27 @@ public:
 
   void insertBody(const Buffer::Instance& chunk,
       InsertCallback ready_for_next_chunk, bool end_stream) override {
-    uint64_t chunk_size = chunk.length();
+ 	uint64_t remaining_chunk_size = chunk.length();
     uint64_t local_chunk_index = 0;
-    while (chunk_size) {
-      // Insert bodies in a contiguous manner
-      // using body_buffer.
+    
+    // Insert bodies in a contiguous manner
+    // using body_buffer.
+    while (remaining_chunk_size) {
       ASSERT(local_chunk_index <= chunk.length());
-      ASSERT(chunk_size > 0);
-      if (available_buffer_bytes <= chunk_size) { // partition is needed.
-        // TODO: Needs refactoring. Copying two times here.
-        //  Might use RawSlices.
-        std::unique_ptr<uint8_t[]>
-            partition(new uint8_t[available_buffer_bytes]);
-        chunk.copyOut(local_chunk_index,
-            available_buffer_bytes, partition.get());
-        body_buffer.add(partition.get(),available_buffer_bytes);
+      ASSERT(remaining_chunk_size > 0);
+      if (available_buffer_bytes <= remaining_chunk_size) {
+        // This chunk is going to fill the buffer, So partition is needed.
+        copyIntoLocalBuffer(available_buffer_bytes, local_chunk_index, chunk);
         ASSERT(body_buffer.length() == hz_cache.bodySizePerEntry());
-        // Body buffer is full here.
-        local_chunk_index += available_buffer_bytes;
-        chunk_size -= available_buffer_bytes;
+        remaining_chunk_size -= available_buffer_bytes;
         flushBuffer();
-        // TODO: deactivated for the ease of development:
+        // TODO: Disabled for the tests temporarily:
         //if (ready_for_next_chunk) ready_for_next_chunk(false);
-      } else { // end of the current chunk's insertion
-      	std::unique_ptr<uint8_t[]> partition(new uint8_t[chunk_size]);
-      	chunk.copyOut(local_chunk_index, chunk_size, partition.get());
-        body_buffer.add(partition.get(),chunk_size);
-        local_chunk_index += chunk_size;
-        available_buffer_bytes -= chunk_size;
-        chunk_size = 0;
+      } else {
+        // end of the current chunk's insertion
+        copyIntoLocalBuffer(remaining_chunk_size, local_chunk_index, chunk);
+        available_buffer_bytes -= remaining_chunk_size;
+        remaining_chunk_size = 0;
       }
     }
     
@@ -157,6 +150,14 @@ public:
   };
 
 private:
+
+  void copyIntoLocalBuffer(uint64_t& size, uint64_t& index,
+	const Buffer::Instance& chunk){
+    std::unique_ptr<uint8_t[]> partition(new uint8_t[size]);
+    chunk.copyOut(index, size, partition.get());
+    body_buffer.add(partition.get(),size);
+    index += size;
+  };
 
   void flushBuffer(){
     HazelcastBodyEntry bodyEntry;
