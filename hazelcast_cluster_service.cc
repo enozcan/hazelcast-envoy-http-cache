@@ -9,21 +9,26 @@ namespace Extensions {
 namespace HttpFilters {
 namespace Cache {
 
-// Hard coded config for the ease of development.
-// TODO: Replaced with file based configuration.
-HazelcastCacheConfig cacheConfig;
+HazelcastClusterService::HazelcastClusterService(HazelcastConfig hz_config) :
+  hz_config_(hz_config) {};
 
-HazelcastClusterService::HazelcastClusterService() {
+void HazelcastClusterService::connect() {
+
+  if (hz) return;
+
   ClientConfig config;
-  config.getGroupConfig().setName(cacheConfig.HZ_GROUP_NAME);
+  config.getGroupConfig().setName(hz_config_.group_name());
+
   config.getNetworkConfig().addAddress(
-      hazelcast::client::Address(cacheConfig.HZ_CLUSTER_IP,
-          cacheConfig.HZ_CLUSTER_PORT));
+      hazelcast::client::Address(hz_config_.ip(),hz_config_.port()));
+
   config.getSerializationConfig().addDataSerializableFactory(
       HazelcastCacheEntrySerializableFactory::FACTORY_ID,
       boost::shared_ptr<serialization::DataSerializableFactory>
           (new HazelcastCacheEntrySerializableFactory()));
+
   hz = std::make_unique<HazelcastClient>(config);
+
 }
 
 // TODO: Make local refs for the maps.
@@ -32,31 +37,35 @@ HazelcastClusterService::HazelcastClusterService() {
 void HazelcastClusterService::
   insertHeader(std::string &&key, const HazelcastHeaderEntry &value) {
   hz->getMap<std::string, HazelcastHeaderEntry>
-      (cacheConfig.HZ_HEADER_MAP_NAME).put(std::move(key),value);
+      (hz_config_.header_map_name()).put(std::move(key),value);
 }
 
 void HazelcastClusterService::
   insertBody(std::string &&key, const HazelcastBodyEntry &value) {
   hz->getMap<std::string, HazelcastBodyEntry>
-      (cacheConfig.HZ_BODY_MAP_NAME).put(std::move(key),value);
+      (hz_config_.body_map_name()).put(std::move(key),value);
 }
 
 HazelcastHeaderPtr HazelcastClusterService::
   lookupHeader(const std::string &key) {
   return hz->getMap<std::string, HazelcastHeaderEntry>
-      (cacheConfig.HZ_HEADER_MAP_NAME).get(key);
+      (hz_config_.header_map_name()).get(key);
 }
 
 HazelcastBodyPtr HazelcastClusterService::
   lookupBody(const std::string &key){
   return hz->getMap<std::string, HazelcastBodyEntry>
-      (cacheConfig.HZ_BODY_MAP_NAME).get(key);
+      (hz_config_.body_map_name()).get(key);
 }
 void HazelcastClusterService::clearMaps() {
-  hz->getMap<std::string, HazelcastBodyEntry>(cacheConfig.HZ_BODY_MAP_NAME)
+  hz->getMap<std::string, HazelcastBodyEntry>(hz_config_.body_map_name())
       .clear();
-  hz->getMap<std::string, HazelcastHeaderEntry>(cacheConfig.HZ_HEADER_MAP_NAME)
+  hz->getMap<std::string, HazelcastHeaderEntry>(hz_config_.header_map_name())
       .clear();
+}
+uint64_t HazelcastClusterService::partitionSize() {
+  return hz_config_.body_partition_size() > 0 ?
+      hz_config_.body_partition_size() : DEFAULT_PARTITION_SIZE;
 }
 
 } // Cache

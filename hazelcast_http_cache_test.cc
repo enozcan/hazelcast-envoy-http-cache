@@ -10,6 +10,7 @@
 #include "test/test_common/utility.h"
 #include "gtest/gtest.h"
 #include "hazelcast_http_cache.h"
+#include "hazelcast.pb.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -17,14 +18,27 @@ namespace HttpFilters {
 namespace Cache {
 namespace {
 
+static HazelcastConfig getTestConfig(){
+  HazelcastConfig hc;
+  hc.set_group_name("dev");
+  hc.set_group_password("dev-pass");
+  hc.set_ip("127.0.0.1");
+  hc.set_port(5701);
+  hc.set_body_map_name("hz::test::body");
+  hc.set_header_map_name("hz::test::header");
+  hc.set_body_partition_size(0);
+  return hc;
+}
+
 class HazelcastHttpCacheTest : public testing::Test {
 protected:
 
   static HazelcastClusterService* cs;
 
   HazelcastHttpCacheTest() {
+    cs->connect();
     hz_cache_ptr = std::make_unique<HazelcastHttpCache>(*cs,
-        3);
+        cs->partitionSize());
     hz_cache_ptr->clearMaps();
     request_headers_.setMethod("GET");
     request_headers_.setHost("example.com");
@@ -33,7 +47,8 @@ protected:
   }
 
   static void SetUpTestSuite() {
-    cs = new HazelcastClusterService();
+    HazelcastConfig cfg = getTestConfig();
+    cs = new HazelcastClusterService(cfg);
   }
 
   static void TearDownTestSuite() {

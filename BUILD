@@ -5,6 +5,12 @@ load(
     "envoy_cc_binary",
     "envoy_cc_library",
     "envoy_cc_test",
+    "envoy_proto_library",
+)
+
+envoy_proto_library(
+    name = "hazelcast",
+    srcs = ["hazelcast.proto"],
 )
 
 envoy_cc_binary(
@@ -35,6 +41,7 @@ envoy_cc_library(
     hdrs = ["hazelcast_cluster_service.h"],
     repository = "@envoy",
     deps = [
+        ":hazelcast_cc_proto",
         ":hazelcast_cache_entry_lib",
     ],
 )
