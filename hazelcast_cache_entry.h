@@ -48,7 +48,7 @@ using hazelcast::client::serialization::DataSerializableFactory;
 class HazelcastHeaderEntry : public IdentifiedDataSerializable {
 public:
   static const int TYPE_ID = HAZELCAST_HEADER_TYPE_ID;
-  Http::HeaderMapPtr header_map_ptr;
+  Http::HeaderMapImplPtr header_map_ptr;
   // Http::HeaderMapPtr trailer_map_ptr; TODO: Not ready on filter side.
   uint64_t total_body_size;
 

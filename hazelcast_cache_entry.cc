@@ -26,8 +26,7 @@ void HazelcastHeaderEntry::writeData(ObjectDataOutput &writer) const {
       [](const Http::HeaderEntry& header, void* context) ->
       Http::HeaderMap::Iterate {ObjectDataOutput* writer_ptr =
             static_cast<ObjectDataOutput*>(context);
-        // TODO: use hz->writeBytes instead
-        //  and prevent copying
+        // TODO: May be prevent copying via writing bytes
         absl::string_view key_view = header.key().getStringView();
         absl::string_view val_view = header.value().getStringView();
         std::string K(key_view.begin(), key_view.size());
@@ -44,8 +43,7 @@ void HazelcastHeaderEntry::readData(ObjectDataInput &reader) {
   header_map_ptr = std::make_unique<Http::HeaderMapImpl>();
   int headers_size = reader.readInt();
   for (int i = 0; i < headers_size; i++) {
-    // TODO: use HeaderMapImpl::addViaMove instead
-    //  to prevent copying
+    // TODO: May be use HeaderMapImpl::addViaMove and prevent copy
     Http::LowerCaseString K(*reader.readUTF());
     std::string V(*reader.readUTF());
     header_map_ptr->addCopy(K,V);
@@ -59,11 +57,12 @@ HazelcastHeaderEntry::HazelcastHeaderEntry(const HazelcastHeaderEntry &other) {
   other.header_map_ptr->iterate(
       [](const Http::HeaderEntry& header, void* context) ->
       Http::HeaderMap::Iterate {
-        absl::string_view key_view = header.key().getStringView();
-        Http::LowerCaseString K(std::string(key_view.begin(), key_view.size()));
-        absl::string_view V = header.value().getStringView();
-        static_cast<HazelcastHeaderEntry*>(context)->
-          header_map_ptr->addCopy(K,V);
+        Http::HeaderString key_string;
+        key_string.setCopy(header.key().getStringView());
+        Http::HeaderString value_string;
+        value_string.setCopy(header.value().getStringView());
+        static_cast<HazelcastHeaderEntry*>(context)->header_map_ptr->
+          addViaMove(std::move(key_string), std::move(value_string));
         return Http::HeaderMap::Iterate::Continue;
       },
       this);
