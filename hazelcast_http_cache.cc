@@ -121,7 +121,7 @@ public:
       ASSERT(remaining_chunk_size > 0);
       if (available_buffer_bytes <= remaining_chunk_size) {
         // This chunk is going to fill the buffer, So partition is needed.
-        copyIntoLocalBuffer(available_buffer_bytes, local_chunk_index, chunk);
+        copyIntoLocalBuffer(local_chunk_index, available_buffer_bytes, chunk);
         ASSERT(body_buffer.length() == hz_cache.bodySizePerEntry());
         remaining_chunk_size -= available_buffer_bytes;
         flushBuffer();
@@ -129,7 +129,7 @@ public:
         //if (ready_for_next_chunk) ready_for_next_chunk(false);
       } else {
         // end of the current chunk's insertion
-        copyIntoLocalBuffer(remaining_chunk_size, local_chunk_index, chunk);
+        copyIntoLocalBuffer(local_chunk_index, remaining_chunk_size, chunk);
         available_buffer_bytes -= remaining_chunk_size;
         remaining_chunk_size = 0;
       }
@@ -151,10 +151,9 @@ public:
 
 private:
 
-  void copyIntoLocalBuffer(uint64_t& size, uint64_t& index,
-	const Buffer::Instance& chunk){
+  void copyIntoLocalBuffer(uint64_t& index, uint64_t& size, const Buffer::Instance& source){
     std::unique_ptr<uint8_t[]> partition(new uint8_t[size]);
-    chunk.copyOut(index, size, partition.get());
+    source.copyOut(index, size, partition.get());
     body_buffer.add(partition.get(),size);
     index += size;
   };
@@ -190,9 +189,9 @@ private:
 };
 }
 
-HazelcastHttpCache::HazelcastHttpCache(HazelcastClusterService& cs,
-    uint64_t body_partition_size) : cluster_service(cs),
-    BODY_PARTITION_SIZE(body_partition_size) {};
+HazelcastHttpCache::HazelcastHttpCache(HazelcastClusterService& cs)
+  : cluster_service(cs),
+  BODY_PARTITION_SIZE(cs.partitionSize()){};
 
 LookupContextPtr HazelcastHttpCache::
   makeLookupContext(LookupRequest&& request) {
@@ -234,9 +233,9 @@ void HazelcastHttpCache::updateHeaders(LookupContextPtr&& lookup_context,
 }
 
 CacheInfo HazelcastHttpCache::cacheInfo() const {
-  // TODO: Customize cache info using IMap stats.
   CacheInfo cache_info;
   cache_info.name_ = "envoy.extensions.filters.http.cache.hazelcast";
+  cache_info.supports_range_requests_ = true;
   return cache_info;
 }
 
@@ -246,10 +245,6 @@ inline const uint64_t& HazelcastHttpCache::bodySizePerEntry(){
 void HazelcastHttpCache::clearMaps() {
   cluster_service.clearMaps();
 }
-
-// TODO: Extract cluster connection from the constructor.
-//  Client should not try to connect to cluster on creation
-//  but with a call i.e. start().
 
 /* Not stable on the filter side (v2-v3 api). Hence disabled for now.
 

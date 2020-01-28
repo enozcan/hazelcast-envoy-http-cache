@@ -2,6 +2,7 @@
 // Created by Enes Özcan on 21.01.2020.
 //
 #include "hazelcast_cache_entry.h"
+#include "absl/container/fixed_array.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -94,13 +95,13 @@ void HazelcastBodyEntry::writeData(ObjectDataOutput &writer) const {
   /* TODO: Store body as byte based rather than string.
    *  Reader yields failure currently.
 
-  uint64_t num_slices = buffer.getRawSlices(nullptr, 0);
+  uint64_t num_slices = buffer_ptr->getRawSlices(nullptr, 0);
   writer.writeLong(num_slices);
-  Envoy::STACK_ARRAY(slices, Envoy::Buffer::RawSlice, num_slices);
-  buffer.getRawSlices(slices.begin(), num_slices);
+  absl::FixedArray<Buffer::RawSlice> slices(num_slices);
+  buffer_ptr->getRawSlices(slices.begin(), num_slices);
   for (const Buffer::RawSlice& slice : slices) {
-    writer.writeBytes(static_cast<const hazelcast::byte*>
-    (slice.mem_),slice.len_);
+    writer.writeBytes(static_cast<const hazelcast::byte*>(slice.mem_),
+                                                          slice.len_);
   }
   */
 

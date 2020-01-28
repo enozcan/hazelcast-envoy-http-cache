@@ -14,7 +14,7 @@ namespace Cache {
 class HazelcastHttpCache : public HttpCache {
 
 public:
-  HazelcastHttpCache(HazelcastClusterService& cs, uint64_t body_partition_size);
+  HazelcastHttpCache(HazelcastClusterService& cs);
 
   // Cache::HttpCache
   LookupContextPtr makeLookupContext(LookupRequest&& request) override;

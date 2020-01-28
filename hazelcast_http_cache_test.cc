@@ -26,7 +26,7 @@ static HazelcastConfig getTestConfig(){
   hc.set_port(5701);
   hc.set_body_map_name("hz::test::body");
   hc.set_header_map_name("hz::test::header");
-  hc.set_body_partition_size(0);
+  hc.set_body_partition_size(0); // 1KB by default
   return hc;
 }
 
@@ -37,8 +37,7 @@ protected:
 
   HazelcastHttpCacheTest() {
     cs->connect();
-    hz_cache_ptr = std::make_unique<HazelcastHttpCache>(*cs,
-        cs->partitionSize());
+    hz_cache_ptr = std::make_unique<HazelcastHttpCache>(*cs);
     hz_cache_ptr->clearMaps();
     request_headers_.setMethod("GET");
     request_headers_.setHost("example.com");
