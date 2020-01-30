@@ -234,7 +234,7 @@ void HazelcastHttpCache::updateHeaders(LookupContextPtr&& lookup_context,
 
 CacheInfo HazelcastHttpCache::cacheInfo() const {
   CacheInfo cache_info;
-  cache_info.name_ = "envoy.extensions.filters.http.cache.hazelcast";
+  cache_info.name_ = "envoy.extensions.http.cache.hazelcast";
   cache_info.supports_range_requests_ = true;
   return cache_info;
 }
@@ -246,29 +246,29 @@ void HazelcastHttpCache::clearMaps() {
   cluster_service.clearMaps();
 }
 
-/* Not stable on the filter side (v2-v3 api). Hence disabled for now.
-
 class HazelcastHttpCacheFactory : public HttpCacheFactory {
 public:
-  HazelcastHttpCacheFactory() :
-  HttpCacheFactory("envoy.extensions.filters.http.cache.hazelcast") {
-    HazelcastClusterService cs;
-    HazelcastCacheConfig cache_cfg;
-    std::make_shared<HazelcastHttpCache>(cs,cache_cfg.HZ_BODY_PARTITION_SIZE);
+  HazelcastHttpCacheFactory() : HttpCacheFactory("envoy.extensions.http.cache.hazelcast") {}
+  ProtobufTypes::MessagePtr createEmptyConfigProto() override {
+    return std::make_unique<Envoy::ProtobufWkt::Empty>();
   }
-  HttpCache& getCache(const envoy::extensions::filters::http::cache::v3::
-      CacheConfig&) override {
-    return *cache_ptr;
+  HttpCache& getCache(const envoy::config::filter::http::cache::v2::CacheConfig& cache_config) override {
+    // TODO: Unique ptr for cluster service causes SEGFAULT on teardown....
+    HazelcastConfig hz_config;
+    MessageUtil::unpackTo(cache_config.typed_config(), hz_config);
+    //cluster_svc_ = std::make_shared<HazelcastClusterService>(hz_config);
+    HazelcastClusterService *cluster_svc_ = new HazelcastClusterService(hz_config);
+    cluster_svc_->connect();
+    cache_ = std::make_unique<HazelcastHttpCache>(*cluster_svc_);
+    return *cache_;
   }
 
 private:
-  // Need to initialize from config before creation,
-  // hence pointer is used.
-  std::shared_ptr<HazelcastHttpCache> cache_ptr;
+  //std::shared_ptr<HazelcastClusterService> cluster_svc_;
+  std::unique_ptr<HazelcastHttpCache> cache_;
 };
-*/
 
-//static Registry::RegisterFactory<HazelcastHttpCacheFactory, HttpCacheFactory> register_;
+static Registry::RegisterFactory<HazelcastHttpCacheFactory, HttpCacheFactory> register_;
 
 } // namespace Cache
 } // namespace HttpFilters

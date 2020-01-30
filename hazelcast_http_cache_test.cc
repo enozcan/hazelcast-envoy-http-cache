@@ -265,15 +265,15 @@ TEST_F(HazelcastHttpCacheTest, StreamingPut) {
   hz_cache_ptr->clearMaps();
 }
 
-/*TEST(Registration, GetFactory) {
-  envoy::extensions::filters::http::cache::v3::CacheConfig config;
+TEST(Registration, GetFactory) {
+  envoy::config::filter::http::cache::v2::CacheConfig config;
+  HazelcastConfig hz_cfg = getTestConfig();
+  config.mutable_typed_config()->PackFrom(hz_cfg);
   HttpCacheFactory* factory =
-      Registry::FactoryRegistry<HttpCacheFactory>::
-      getFactory("envoy.extensions.filters.http.cache.simple");
+    Registry::FactoryRegistry<HttpCacheFactory>::getFactory("envoy.extensions.http.cache.hazelcast");
   ASSERT_NE(factory, nullptr);
-  EXPECT_EQ(factory->getCache(config)
-    .cacheInfo().name_, "envoy.extensions.filters.http.cache.simple");
-}*/
+  EXPECT_EQ(factory->getCache(config).cacheInfo().name_, "envoy.extensions.http.cache.hazelcast");
+}
 
 } // namespace
 } // namespace Cache
