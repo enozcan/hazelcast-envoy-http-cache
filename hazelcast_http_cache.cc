@@ -253,18 +253,25 @@ public:
     return std::make_unique<Envoy::ProtobufWkt::Empty>();
   }
   HttpCache& getCache(const envoy::config::filter::http::cache::v2::CacheConfig& cache_config) override {
-    // TODO: Unique ptr for cluster service causes SEGFAULT on teardown....
     HazelcastConfig hz_config;
     MessageUtil::unpackTo(cache_config.typed_config(), hz_config);
-    //cluster_svc_ = std::make_shared<HazelcastClusterService>(hz_config);
-    HazelcastClusterService *cluster_svc_ = new HazelcastClusterService(hz_config);
+
+    // see destructor for the explicit allocation
+    cluster_svc_ = new HazelcastClusterService(hz_config);
     cluster_svc_->connect();
     cache_ = std::make_unique<HazelcastHttpCache>(*cluster_svc_);
     return *cache_;
   }
 
+  ~HazelcastHttpCacheFactory(){
+    // TODO: reformat destructors. Currently the below line fails. (SEGF)
+    //  this is also why smart ptr is not used.
+
+    // delete cluster_svc_;
+  }
+
 private:
-  //std::shared_ptr<HazelcastClusterService> cluster_svc_;
+  HazelcastClusterService* cluster_svc_;
   std::unique_ptr<HazelcastHttpCache> cache_;
 };
 
