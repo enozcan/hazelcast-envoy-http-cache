@@ -28,21 +28,10 @@ envoy_cc_library(
     hdrs = ["hazelcast_http_cache.h"],
     repository = "@envoy",
     deps = [
-        ":hazelcast_cluster_service_lib",
-        "@envoy//include/envoy/registry",
-        "@envoy//source/extensions/filters/http/cache:http_cache_lib",
-    ],
-)
-
-
-envoy_cc_library(
-    name = "hazelcast_cluster_service_lib",
-    srcs = ["hazelcast_cluster_service.cc"],
-    hdrs = ["hazelcast_cluster_service.h"],
-    repository = "@envoy",
-    deps = [
         ":hazelcast_cc_proto",
         ":hazelcast_cache_entry_lib",
+        "@envoy//include/envoy/registry",
+        "@envoy//source/extensions/filters/http/cache:http_cache_lib",
     ],
 )
 

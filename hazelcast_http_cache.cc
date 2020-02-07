@@ -113,7 +113,6 @@ public:
       InsertCallback ready_for_next_chunk, bool end_stream) override {
  	uint64_t remaining_chunk_size = chunk.length();
     uint64_t local_chunk_index = 0;
-    
     // Insert bodies in a contiguous manner
     // using body_buffer.
     while (remaining_chunk_size) {
@@ -189,9 +188,11 @@ private:
 };
 }
 
-HazelcastHttpCache::HazelcastHttpCache(HazelcastClusterService& cs)
-  : cluster_service(cs),
-  BODY_PARTITION_SIZE(cs.partitionSize()){};
+HazelcastHttpCache::HazelcastHttpCache(HazelcastConfig config)
+  : hz_config_(config),
+  BODY_PARTITION_SIZE(config.body_partition_size() == 0 ?
+                      DEFAULT_PARTITION_SIZE :
+                      config.body_partition_size()) {};
 
 LookupContextPtr HazelcastHttpCache::
   makeLookupContext(LookupRequest&& request) {
@@ -206,22 +207,26 @@ InsertContextPtr HazelcastHttpCache::
 
 HazelcastBodyPtr HazelcastHttpCache::
   lookupBody(const std::string& key) {
-  return cluster_service.lookupBody(key);
+  return hz->getMap<std::string, HazelcastBodyEntry>
+      (hz_config_.body_map_name()).get(key);
 }
 
 HazelcastHeaderPtr HazelcastHttpCache::
   lookupHeader(const uint64_t& hash_key) {
-  return cluster_service.lookupHeader(std::to_string(hash_key));
+  return hz->getMap<std::string, HazelcastHeaderEntry>
+      (hz_config_.header_map_name()).get(std::to_string(hash_key));
 }
 
 void HazelcastHttpCache::insertBody(
     std::string&& hash_key, const HazelcastBodyEntry& entry) {
-  cluster_service.insertBody(std::move(hash_key),entry);
+  hz->getMap<std::string, HazelcastBodyEntry>
+      (hz_config_.body_map_name()).put(std::move(hash_key),entry);
 }
 
 void HazelcastHttpCache::insertHeader(
      const uint64_t& hash_key, const HazelcastHeaderEntry& entry) {
-    cluster_service.insertHeader(std::to_string(hash_key),entry);
+    hz->getMap<std::string, HazelcastHeaderEntry>
+      (hz_config_.header_map_name()).put(std::to_string(hash_key),entry);
 }
 
 void HazelcastHttpCache::updateHeaders(LookupContextPtr&& lookup_context,
@@ -243,7 +248,26 @@ inline const uint64_t& HazelcastHttpCache::bodySizePerEntry(){
   return BODY_PARTITION_SIZE;
 }
 void HazelcastHttpCache::clearMaps() {
-  cluster_service.clearMaps();
+  hz->getMap<std::string, HazelcastBodyEntry>
+      (hz_config_.body_map_name()).clear();
+  hz->getMap<std::string, HazelcastHeaderEntry>
+      (hz_config_.header_map_name()).clear();
+}
+void HazelcastHttpCache::connect() {
+  if (hz) return;
+  ClientConfig config;
+  config.getGroupConfig().setName(hz_config_.group_name());
+
+  config.getNetworkConfig().addAddress(
+      hazelcast::client::Address(hz_config_.ip(),hz_config_.port()));
+
+  config.getSerializationConfig().addDataSerializableFactory(
+      HazelcastCacheEntrySerializableFactory::FACTORY_ID,
+      boost::shared_ptr<serialization::DataSerializableFactory>
+          (new HazelcastCacheEntrySerializableFactory()));
+
+  hz = std::make_unique<HazelcastClient>(config);
+
 }
 
 class HazelcastHttpCacheFactory : public HttpCacheFactory {
@@ -255,23 +279,11 @@ public:
   HttpCache& getCache(const envoy::config::filter::http::cache::v2::CacheConfig& cache_config) override {
     HazelcastConfig hz_config;
     MessageUtil::unpackTo(cache_config.typed_config(), hz_config);
-
-    // see destructor for the explicit allocation
-    cluster_svc_ = new HazelcastClusterService(hz_config);
-    cluster_svc_->connect();
-    cache_ = std::make_unique<HazelcastHttpCache>(*cluster_svc_);
+    cache_ = std::make_unique<HazelcastHttpCache>(hz_config);
+    cache_->connect();
     return *cache_;
   }
-
-  ~HazelcastHttpCacheFactory(){
-    // TODO: reformat destructors. Currently the below line fails. (SEGF)
-    //  this is also why smart ptr is not used.
-
-    // delete cluster_svc_;
-  }
-
 private:
-  HazelcastClusterService* cluster_svc_;
   std::unique_ptr<HazelcastHttpCache> cache_;
 };
 

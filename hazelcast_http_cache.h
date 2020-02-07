@@ -4,17 +4,22 @@
 #pragma once
 
 #include "extensions/filters/http/cache/http_cache.h"
-#include "hazelcast_cluster_service.h"
+#include "hazelcast/client/HazelcastClient.h"
+#include "hazelcast/client/IMap.h"
+#include "hazelcast_cache_entry.h"
+#include "hazelcast.pb.h"
 
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
 namespace Cache {
 
+using hazelcast::client::IMap;
+
 class HazelcastHttpCache : public HttpCache {
 
 public:
-  HazelcastHttpCache(HazelcastClusterService& cs);
+  HazelcastHttpCache(HazelcastConfig config);
 
   // Cache::HttpCache
   LookupContextPtr makeLookupContext(LookupRequest&& request) override;
@@ -24,17 +29,18 @@ public:
       Http::HeaderMapPtr&& response_headers) override;
   CacheInfo cacheInfo() const override;
 
-
   void insertHeader(const uint64_t& hash_key, const HazelcastHeaderEntry& entry);
   void insertBody(std::string&& hash_key, const HazelcastBodyEntry& entry);
   HazelcastHeaderPtr lookupHeader(const uint64_t& hash_key);
   HazelcastBodyPtr lookupBody(const std::string& key);
   const uint64_t& bodySizePerEntry();
   void clearMaps(); // For testing only
-
+  void connect();
 private:
-  HazelcastClusterService& cluster_service;
+  HazelcastConfig hz_config_;
+  std::unique_ptr<HazelcastClient> hz;
   const uint64_t BODY_PARTITION_SIZE;
+  static const uint64_t DEFAULT_PARTITION_SIZE = 1024;
 };
 
 } // namespace Cache
