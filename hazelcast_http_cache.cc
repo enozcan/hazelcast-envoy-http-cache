@@ -46,29 +46,25 @@ public:
   void getBody(const AdjustedByteRange& range,
       LookupBodyCallback&& cb) override {
     ASSERT(range.end() <= total_body_size);
-    BufferImplPtr buffer_ptr = std::make_unique<Buffer::OwnedImpl>();
     uint64_t body_index = range.begin() / body_partition_size;
     HazelcastBodyPtr body = hz_cache.lookupBody
         (std::to_string(hash_key) + std::to_string(body_index));
     if (body) {
-        // Beginning of the buffer is drained
-        // if necessary (i.e. range does not starts from)
-        // the beginning of the chunk).
-        body->buffer_ptr->drain(range.begin() % body_partition_size);
+        uint64_t start = (range.begin() % body_partition_size);
+        hazelcast::byte* data = body->body_buffer_.data() + start;
         if (range.end() < (body_index + 1) * body_partition_size){
           // No other chunk is needed since one chunk satisfies
-          // the range. Move only needed bytes.
-          buffer_ptr->move(*body->buffer_ptr,
-              range.end() % body_partition_size);
+          // the range. Copy only needed bytes.
+          cb(std::make_unique<Buffer::OwnedImpl>(data,
+              range.end() % body_partition_size));
         } else {
-          // Another body chunk is needed. Hence move all
-          // the bytes in the buffer.
-    	  buffer_ptr->move(*body->buffer_ptr);
+          // Another body chunk is needed. Hence copy all
+          // the bytes until the end of the buffer.
+          cb(std::make_unique<Buffer::OwnedImpl>(data,
+              body->body_buffer_.size() - start));
         }
-        cb(std::move(buffer_ptr));
     } else {
-        // Body is expected to reside in the cache but lookup
-        // is failed.
+        // Body is expected to reside in the cache but lookup is failed.
         cb(nullptr); // abort lookup
     }
   };
@@ -96,8 +92,9 @@ public:
   HazelcastInsertContext(LookupContext& lookup_context,
       HazelcastHttpCache& cache) : hz_cache(cache),
       hash_key(dynamic_cast<HazelcastLookupContext&>
-      (lookup_context).getHashKey()) {
-    available_buffer_bytes = hz_cache.bodySizePerEntry();
+      (lookup_context).getHashKey()),
+      body_partition_size(cache.bodySizePerEntry()) {
+    available_buffer_bytes = body_partition_size;
   };
 
   void insertHeaders(const Http::HeaderMap& response_headers,
@@ -111,7 +108,7 @@ public:
 
   void insertBody(const Buffer::Instance& chunk,
       InsertCallback ready_for_next_chunk, bool end_stream) override {
- 	uint64_t remaining_chunk_size = chunk.length();
+    uint64_t remaining_chunk_size = chunk.length();
     uint64_t local_chunk_index = 0;
     // Insert bodies in a contiguous manner
     // using body_buffer.
@@ -121,8 +118,9 @@ public:
       if (available_buffer_bytes <= remaining_chunk_size) {
         // This chunk is going to fill the buffer, So partition is needed.
         copyIntoLocalBuffer(local_chunk_index, available_buffer_bytes, chunk);
-        ASSERT(body_buffer.length() == hz_cache.bodySizePerEntry());
+        ASSERT(buffer_vector.size() == body_partition_size);
         remaining_chunk_size -= available_buffer_bytes;
+        available_buffer_bytes = 0;
         flushBuffer();
         // TODO: Disabled for the tests temporarily:
         //if (ready_for_next_chunk) ready_for_next_chunk(false);
@@ -150,21 +148,23 @@ public:
 
 private:
 
-  void copyIntoLocalBuffer(uint64_t& index, uint64_t& size, const Buffer::Instance& source){
-    std::unique_ptr<uint8_t[]> partition(new uint8_t[size]);
-    source.copyOut(index, size, partition.get());
-    body_buffer.add(partition.get(),size);
+  void copyIntoLocalBuffer(uint64_t& index, uint64_t& size,
+      const Buffer::Instance& source){
+    uint64_t buffer_size = body_partition_size - available_buffer_bytes;
+    buffer_vector.resize(buffer_vector.size() + size);
+    source.copyOut(index, size, buffer_vector.data() + buffer_size);
     index += size;
   };
 
   void flushBuffer(){
+    uint64_t buffer_size = body_partition_size - available_buffer_bytes;
     HazelcastBodyEntry bodyEntry;
-    total_body_size += body_buffer.length();
-    bodyEntry.buffer_ptr->move(body_buffer);
+    total_body_size += buffer_size;
+    bodyEntry.body_buffer_ = std::move(buffer_vector);
+    buffer_vector.clear();
     hz_cache.insertBody(std::to_string(hash_key) + std::to_string(body_order++),
         bodyEntry);
-    available_buffer_bytes = hz_cache.bodySizePerEntry(); // Reset buffer index
-    ASSERT(body_buffer.length() == 0);
+    available_buffer_bytes = body_partition_size; // Reset buffer index
   }
 
   void flushHeader(){
@@ -176,6 +176,7 @@ private:
   HazelcastHeaderEntry header;
   int body_order = 0;
   const uint64_t hash_key;
+  const uint64_t& body_partition_size;
   uint64_t available_buffer_bytes;
   uint64_t total_body_size = 0;
 
@@ -183,7 +184,7 @@ private:
   // they have to be inserted contiguous. This buffer
   // is used to store bytes coming from filter and
   // flushed when it is full.
-  Buffer::OwnedImpl body_buffer;
+  std::vector<hazelcast::byte> buffer_vector;
 
 };
 }

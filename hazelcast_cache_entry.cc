@@ -71,14 +71,11 @@ HazelcastHeaderEntry::HazelcastHeaderEntry(const HazelcastHeaderEntry &other) {
 
 /// HazelcastBodyEntry
 
-HazelcastBodyEntry::HazelcastBodyEntry() {
-  buffer_ptr = std::make_unique<Buffer::OwnedImpl>();
-};
+HazelcastBodyEntry::HazelcastBodyEntry() {};
 
 // Hazelcast needs copy constructor in case of Near Cache usage.
 HazelcastBodyEntry::HazelcastBodyEntry(const HazelcastBodyEntry &other) {
-  buffer_ptr = std::make_unique<Buffer::OwnedImpl>();
-  buffer_ptr->add(*other.buffer_ptr);
+  this->body_buffer_ = other.body_buffer_;
 };
 
 int HazelcastBodyEntry::getFactoryId() const {
@@ -90,35 +87,11 @@ int HazelcastBodyEntry::getClassId() const {
 };
 
 void HazelcastBodyEntry::writeData(ObjectDataOutput &writer) const {
-  std::string body_string = buffer_ptr->toString();
-  writer.writeUTF(&body_string);
-  /* TODO: Store body as byte based rather than string.
-   *  Reader yields failure currently.
-
-  uint64_t num_slices = buffer_ptr->getRawSlices(nullptr, 0);
-  writer.writeLong(num_slices);
-  absl::FixedArray<Buffer::RawSlice> slices(num_slices);
-  buffer_ptr->getRawSlices(slices.begin(), num_slices);
-  for (const Buffer::RawSlice& slice : slices) {
-    writer.writeBytes(static_cast<const hazelcast::byte*>(slice.mem_),
-                                                          slice.len_);
-  }
-  */
-
+  writer.writeByteArray(&body_buffer_);
 }
 
 void HazelcastBodyEntry::readData(ObjectDataInput &reader) {
-  std::string body_string = *reader.readUTF();
-  buffer_ptr->add(body_string);
-  /* TODO: Store body as byte based rather than string.
-   *  below method is not working as expected for now.
-
-  uint64_t slices_left = reader.readLong();
-  for ( ; slices_left > 0 ; slices_left-- ) {
-    std::vector<hazelcast::byte> byte_vector = *(reader.readByteArray());
-    buffer.add(byte_vector.data(), byte_vector.size());
-  }
-  */
+  body_buffer_ = *reader.readByteArray();
 }
 
 } // Cache

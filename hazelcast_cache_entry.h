@@ -49,7 +49,6 @@ class HazelcastHeaderEntry : public IdentifiedDataSerializable {
 public:
   static const int TYPE_ID = HAZELCAST_HEADER_TYPE_ID;
   Http::HeaderMapImplPtr header_map_ptr;
-  // Http::HeaderMapPtr trailer_map_ptr; TODO: Not ready on filter side.
   uint64_t total_body_size;
 
   HazelcastHeaderEntry();
@@ -101,7 +100,8 @@ public:
 class HazelcastBodyEntry : public IdentifiedDataSerializable {
 public:
   static const int TYPE_ID = HAZELCAST_BODY_TYPE_ID;
-  BufferImplPtr buffer_ptr;
+
+  std::vector<hazelcast::byte> body_buffer_;
 
   HazelcastBodyEntry();
   HazelcastBodyEntry(const HazelcastBodyEntry &other);
