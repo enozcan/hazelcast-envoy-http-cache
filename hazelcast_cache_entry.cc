@@ -2,7 +2,6 @@
 // Created by Enes Özcan on 21.01.2020.
 //
 #include "hazelcast_cache_entry.h"
-#include "absl/container/fixed_array.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -27,13 +26,12 @@ void HazelcastHeaderEntry::writeData(ObjectDataOutput &writer) const {
       [](const Http::HeaderEntry& header, void* context) ->
       Http::HeaderMap::Iterate {ObjectDataOutput* writer_ptr =
             static_cast<ObjectDataOutput*>(context);
-        // TODO: May be prevent copying via writing bytes
         absl::string_view key_view = header.key().getStringView();
         absl::string_view val_view = header.value().getStringView();
-        std::string K(key_view.begin(), key_view.size());
-        std::string V(val_view.begin(), val_view.size());
-        writer_ptr->writeUTF(&K);
-        writer_ptr->writeUTF(&V);
+        std::vector<char> key_vector(key_view.begin(),key_view.end());
+        std::vector<char> val_vector(val_view.begin(),val_view.end());
+        writer_ptr->writeCharArray(&key_vector);
+        writer_ptr->writeCharArray(&val_vector);
         return Http::HeaderMap::Iterate::Continue;
       },
       &writer);
@@ -44,10 +42,12 @@ void HazelcastHeaderEntry::readData(ObjectDataInput &reader) {
   header_map_ptr = std::make_unique<Http::HeaderMapImpl>();
   int headers_size = reader.readInt();
   for (int i = 0; i < headers_size; i++) {
-    // TODO: May be use HeaderMapImpl::addViaMove and prevent copy
-    Http::LowerCaseString K(*reader.readUTF());
-    std::string V(*reader.readUTF());
-    header_map_ptr->addCopy(K,V);
+    std::vector<char> key_vector = *reader.readCharArray();
+    std::vector<char> val_vector = *reader.readCharArray();
+    Http::HeaderString key,val;
+    key.append(key_vector.data(),key_vector.size());
+    val.append(val_vector.data(),val_vector.size());
+    header_map_ptr->addViaMove(std::move(key),std::move(val));
   }
   total_body_size = reader.readLong();
 }
