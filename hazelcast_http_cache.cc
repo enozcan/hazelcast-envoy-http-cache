@@ -214,8 +214,8 @@ HazelcastBodyPtr HazelcastHttpCache::
 
 HazelcastHeaderPtr HazelcastHttpCache::
   lookupHeader(const uint64_t& hash_key) {
-  return hz->getMap<std::string, HazelcastHeaderEntry>
-      (hz_config_.header_map_name()).get(std::to_string(hash_key));
+  return hz->getMap<int64_t, HazelcastHeaderEntry>
+      (hz_config_.header_map_name()).get(static_cast<int64_t>(hash_key));
 }
 
 void HazelcastHttpCache::insertBody(
@@ -226,8 +226,8 @@ void HazelcastHttpCache::insertBody(
 
 void HazelcastHttpCache::insertHeader(
      const uint64_t& hash_key, const HazelcastHeaderEntry& entry) {
-    hz->getMap<std::string, HazelcastHeaderEntry>
-      (hz_config_.header_map_name()).put(std::to_string(hash_key),entry);
+    hz->getMap<int64_t, HazelcastHeaderEntry>
+      (hz_config_.header_map_name()).put(static_cast<int64_t>(hash_key),entry);
 }
 
 void HazelcastHttpCache::updateHeaders(LookupContextPtr&& lookup_context,

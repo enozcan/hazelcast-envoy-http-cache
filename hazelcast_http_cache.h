@@ -41,6 +41,8 @@ private:
   std::unique_ptr<HazelcastClient> hz;
   const uint64_t BODY_PARTITION_SIZE;
   static const uint64_t DEFAULT_PARTITION_SIZE = 1024;
+
+  // TODO: Inject IMaps via local fields.
 };
 
 } // namespace Cache
