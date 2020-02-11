@@ -255,8 +255,7 @@ TEST_F(HazelcastHttpCacheTest, StreamingPut) {
   hz_cache_ptr->clearMaps();
 }
 
-/*TEST(Registration, GetFactory) {
-  // TODO: SegFault during tear down.
+TEST(Registration, GetFactory) {
   envoy::config::filter::http::cache::v2::CacheConfig config;
   HazelcastConfig hz_cfg = getTestConfig();
   config.mutable_typed_config()->PackFrom(hz_cfg);
@@ -265,7 +264,12 @@ TEST_F(HazelcastHttpCacheTest, StreamingPut) {
   ASSERT_NE(factory, nullptr);
   HazelcastHttpCache& cache = static_cast<HazelcastHttpCache&>(factory->getCache(config));
   EXPECT_EQ(cache.cacheInfo().name_, "envoy.extensions.http.cache.hazelcast");
-}*/
+
+  // Explicitly destroy Hazelcast connection here. Otherwise the test
+  // environment does not wait for cache destructor and causes segfault.
+  cache.disconnect();
+
+}
 
 } // namespace
 } // namespace Cache

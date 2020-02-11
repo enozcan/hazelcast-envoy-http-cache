@@ -35,7 +35,11 @@ public:
   HazelcastBodyPtr lookupBody(const std::string& key);
   const uint64_t& bodySizePerEntry();
   void clearMaps(); // For testing only
+
   void connect();
+  void disconnect();
+
+  ~HazelcastHttpCache();
 private:
   HazelcastConfig hz_config_;
   std::unique_ptr<HazelcastClient> hz;

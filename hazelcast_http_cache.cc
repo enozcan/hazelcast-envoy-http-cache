@@ -271,21 +271,37 @@ void HazelcastHttpCache::connect() {
 
 }
 
+void HazelcastHttpCache::disconnect() {
+  if (hz) {
+    hz->shutdown();
+    hz.release();
+  }
+}
+
+HazelcastHttpCache::~HazelcastHttpCache() {
+  disconnect();
+}
+
 class HazelcastHttpCacheFactory : public HttpCacheFactory {
 public:
-  HazelcastHttpCacheFactory() : HttpCacheFactory("envoy.extensions.http.cache.hazelcast") {}
+  HazelcastHttpCacheFactory() : HttpCacheFactory("envoy.extensions.http.cache.hazelcast") {};
+
   ProtobufTypes::MessagePtr createEmptyConfigProto() override {
     return std::make_unique<Envoy::ProtobufWkt::Empty>();
   }
-  HttpCache& getCache(const envoy::config::filter::http::cache::v2::CacheConfig& cache_config) override {
+
+  HttpCache& getCache(
+      const envoy::config::filter::http::cache::v2::CacheConfig& cache_config) override {
     HazelcastConfig hz_config;
     MessageUtil::unpackTo(cache_config.typed_config(), hz_config);
     cache_ = std::make_unique<HazelcastHttpCache>(hz_config);
     cache_->connect();
     return *cache_;
   }
+
 private:
   std::unique_ptr<HazelcastHttpCache> cache_;
+
 };
 
 static Registry::RegisterFactory<HazelcastHttpCacheFactory, HttpCacheFactory> register_;
