@@ -1,5 +1,5 @@
-### See current progress on the fork: 
-https://github.com/enozcan/envoy/tree/hazelcast_http_cache
+### See current progress on the PR: 
+https://github.com/envoyproxy/envoy/pull/10536
 
 # Hazelcast Envoy Http Cache Plugin
 Pluggable cache implementation backed by Hazelcast IMDG and Hazelcast Cpp Client for Envoy http cache filter.
